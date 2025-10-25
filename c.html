@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>매아리 그림일기</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    :root{
+      --header-h:60px;
+      --nav-h:56px;
+      /* ✅ 비율만 바꾸면 홈/전용화면/일기장 동일적용 */
+      --art-w: 4;  /* 가로 */
+      --art-h: 3;  /* 세로 */
+      --paper:#fffdf8;
+      --pencil:#222;
+    }
+    *{box-sizing:border-box}
+    body { font-family: 'Pretendard', system-ui, -apple-system, sans-serif; background:#FAFAFA; color:#333; margin:0; }
+    header { position: sticky; top:0; height:var(--header-h); background:rgba(255,255,255,.9); backdrop-filter: blur(8px);
+      border-bottom: 2px solid #FFE08C; display:flex; justify-content:space-between; align-items:center; padding:12px 16px; z-index:2; }
+
+    main { max-width: 540px; margin:auto; padding:16px; padding-bottom:calc(var(--nav-h) + 16px); }
+
+    /* ===== 스케치북 공통 ===== */
+    .sketchbook{
+      position:relative;
+      background: var(--paper);
+      border: 2px solid var(--pencil);
+      border-radius: 16px;
+      padding: 14px 14px 16px;
+      box-shadow: 0 6px 16px rgba(0,0,0,0.06);
+      /* 종이 질감 살짝 */
+      background-image:
+        linear-gradient(transparent 0, transparent 28px, rgba(0,0,0,0.035) 28px, transparent 29px),
+        radial-gradient(rgba(0,0,0,0.02) 1px, transparent 1px);
+      background-size: 100% 29px, 6px 6px;
+      background-position: 0 18px, 0 0;
+    }
+    .ring-strip{
+      position:absolute; left:0; right:0; top:0;
+      height:22px;
+      border-bottom: 2px solid var(--pencil);
+      background: linear-gradient(#ece8df, #f7f3ea);
+      border-top-left-radius: 14px;
+      border-top-right-radius: 14px;
+      overflow:hidden;
+    }
+    .ring-strip .holes{
+      position:absolute; inset:0;
+      background:
+        radial-gradient(circle at 13px 50%, #333 6px, transparent 7px) 0 50%/ 52px 100% repeat-x;
+      opacity:.2;
+      mix-blend-mode: multiply;
+    }
+
+    /* ===== 홈 화면 높이 (수정 버전) ===== */
+
+/* 화면 전체 높이에 맞춰 억지로 늘리지 않고,
+   그냥 내용만큼만 높이를 가지게 변경 */
+#screen-home {
+  /* min-height: calc(100svh - var(--header-h)); */ /* ← 삭제 */
+  display: block; /* flex -> block */
+}
+
+/* flex로 늘어나던 거 막고, 그냥 블록으로 */
+#screen-home .sheet-wrap {
+  /* flex:1;               ← 삭제 */
+  /* display:flex;         ← 삭제 */
+  width: 100%;
+  max-width: 100%;
+  display: block;
+}
+
+/* 스케치북 박스가 화면 높이에 맞춰 커지던 거 제거 */
+#homeSheet {
+  /* min-height: calc(100svh - var(--header-h) - 32px); */ /* ← 삭제 */
+  display: flex;
+  flex-direction: column;
+}
+
+
+    .row { display:flex; align-items:center; gap:10px; margin:10px 0 6px; }
+    .row .label { min-width:52px; font-weight:700; color:#2b2b2b; }
+    .row .value { font-weight:700; color:#333; }
+    .row input[type="text"] {
+      flex:1; padding:10px 12px; border:2px solid var(--pencil); border-radius:12px; font-size:15px;
+      background: #fffef9;
+    }
+
+    /* 날씨 버튼만 (박스 제거) */
+    .weather-wrap{ display:flex; align-items:center; gap:8px; margin-left:auto; }
+    .weather-label { font-weight:700; margin-right:2px; color:#2b2b2b; }
+    /* 이모지 가운데 정렬 */
+    .weather-btn{
+      position: relative;
+      width:38px; height:38px;
+      border-radius:10px;
+      border:2px dashed #b6b6b6;
+      background:#fff;
+      cursor:pointer;
+      font-size:0; line-height:0; padding:0;
+      transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+    }
+    .weather-btn::after{
+      content: attr(data-w);
+      position:absolute; left:50%; top:50%;
+      transform: translate(-50%, -50%);
+      font-size:20px; line-height:1;
+      font-family: 'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif;
+    }
+    .weather-btn:hover{ transform: translateY(-1px); box-shadow:0 1px 0 #eee; }
+    .weather-btn.active { border-color:#FFB800; box-shadow:0 0 0 3px #FFE08C; }
+    .weather-wrap.readonly .weather-btn{ pointer-events:none; opacity:.75; }
+
+    .dash { height:0; border:none; border-top:4px dashed #888; margin:10px 0 12px; opacity:.6; }
+
+    /* ===== 그림 프레임(스케치북 캔버스) ===== */
+    .sketch-artframe{
+      width:100%;
+      aspect-ratio: var(--art-w) / var(--art-h);
+      border-radius:12px;
+      border:2px solid var(--pencil);
+      background:#fffef9;
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,0.06);
+      display:grid; place-items:center; overflow:hidden;
+    }
+    .sketch-artframe img{ width:100%; height:100%; object-fit:contain; display:block; }
+
+    /* 편집모드 썸네일(프레임 내부 점선) */
+    .thumb-inner{
+      width:100%;
+      aspect-ratio: var(--art-w) / var(--art-h);
+      border-radius:10px; border:2px dashed #aaa;
+      display:grid; place-items:center; background:#fffef9; cursor:pointer;
+    }
+    .thumb-inner:hover{ border-color:#6BB7FF; }
+    .thumb-inner img{ width:100%; height:100%; object-fit:contain; border-radius:8px; }
+
+    /* 줄 공책 느낌 텍스트 박스 */
+    .lined-box { border:2px solid var(--pencil); border-radius:14px; padding:10px; background:#fffef9; }
+    .lined-textarea {
+      width:100%; min-height:160px; border:none; outline:none; resize:none; padding:10px 12px; font-size:16px; line-height:32px;
+      background-image:repeating-linear-gradient(#bfbfbf3a 0 1px, transparent 1px 32px);
+      background-size:100% 32px; background-position:0 26px; border-radius:8px;
+    }
+
+    .btn { border:none; border-radius:16px; padding:10px 14px; cursor:pointer; font-size:15px; }
+    .btn-outline { background:#fff; border:2px solid var(--pencil); }
+    .btn-yellow { background:#FFE08C; color:#333; border:2px solid #d3a700; }
+    .btn-danger { background:#F28482; color:#fff; border:2px solid #c96c6a; }
+    .btn-primary { background:#6BB7FF; color:#fff; border:2px solid #4f9fe9; }
+
+    nav { position:fixed; bottom:0; left:0; right:0; height:var(--nav-h); display:flex; border-top:2px solid #FFE08C; background:#fff; z-index:2; }
+    nav button { flex:1; padding:12px 0; background:none; border:none; font-size:14px; color:gray; cursor:pointer; }
+    nav button.active { color:#6BB7FF; font-weight:bold; }
+
+    .teacher-section { background:#F7FBFF; border:2px dashed #6BB7FF; border-radius:12px; padding:12px; margin-top:10px; }
+    .stamp-overlay { position:absolute; top:6px; right:6px; width:56px; height:56px; opacity:.95; pointer-events:none; }
+    .stamp-big { width:120px; height:120px; display:inline-block; opacity:.95; margin:6px 0 8px; transform: rotate(-6deg); }
+
+    /* ===== 내 일기장: 폴라로이드 카드 ===== */
+    .grid { display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
+    .grid .item { position:relative; cursor:pointer; transform: rotate(-0.2deg); transition: transform .18s ease, box-shadow .18s ease; }
+    .grid .item:hover { transform: rotate(0deg) translateY(-2px); }
+    .polaroid{
+      position:relative;           /* ✅ 도장 오버레이 기준 */
+      background:#fffef9;
+      border: 2px solid var(--pencil);
+      border-radius: 14px;
+      padding: 8px 8px 10px;
+      box-shadow: 0 4px 10px rgba(0,0,0,.06);
+    }
+    .polaroid .photo{
+      width:100%;
+      aspect-ratio: var(--art-w) / var(--art-h);
+      border-radius:8px;
+      border:1px solid #d8d2c7;
+      background:#fff; display:grid; place-items:center; overflow:hidden;
+    }
+    .polaroid .photo img{ width:100%; height:100%; object-fit:contain; display:block; }
+    .tape{
+      position:absolute; left:50%; top:-8px; transform: translateX(-50%) rotate(-3deg);
+      width:60px; height:16px; background: repeating-linear-gradient(45deg, #f3e1a1, #f3e1a1 6px, #f5e7b8 6px, #f5e7b8 12px);
+      opacity:.9; border:1px solid rgba(0,0,0,.08); border-radius:2px; box-shadow: 0 2px 3px rgba(0,0,0,.08);
+      pointer-events:none;
+    }
+    .pol-title{ font-weight:700; margin-top:6px; }
+    .pol-sub{ font-size:11px; color:#646464; }
+
+    .back-btn { background:#F9B4AB; color:#fff; padding:8px 12px; border:none; border-radius:12px; cursor:pointer; margin-bottom:10px; }
+
+    /* ===== 그림 전용 화면 ===== */
+    #screen-drawonly { min-height:calc(100svh - var(--header-h)); display:flex; }
+    .draw-pane{ flex:1; background:var(--paper); border-radius:18px; padding:12px; border:2px solid var(--pencil); display:flex; flex-direction:column; gap:10px; }
+    .palette { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+    .color-btn { width:28px; height:28px; border-radius:50%; border:2px solid #fff; cursor:pointer; box-shadow:0 0 2px rgba(0,0,0,.2); }
+    .canvas-box {
+      width:100%;
+      aspect-ratio: var(--art-w) / var(--art-h);
+      border:2px dashed #bbb; border-radius:12px; overflow:hidden; background:#fffef9;
+    }
+    canvas { width:100%; height:100%; display:block; background:#fff; }
+
+    /* 홈화면 액션 영역: 오른쪽 정렬 */
+.home-actions{
+  display:flex;
+  justify-content:flex-end;
+  gap:8px;
+  margin-top:12px;
+}
+
+  </style>
+  
+</head>
+<body>
+  <header>
+    <div class="logo" style="display:flex;align-items:center;gap:10px;">
+      <img src="logo.png" alt="매아리 로고" style="height:36px;border-radius:8px;">
+      <div>
+        <div style="color:#6BB7FF;font-weight:700;">매아리</div>
+        <div style="color:#7DCFB6;font-size:12px;">매일 아이 이해하기</div>
+      </div>
+    </div>
+    <div>🌤️</div>
+  </header>
+
+  <!-- ✅ 홈 (오늘 일기: 읽기 or 폼) -->
+  <main id="screen-home">
+    <div class="sheet-wrap" style="width:100%;">
+      <!-- 처음엔 렌더 완료 전까지 숨김 → 레이아웃 흔들림 방지 -->
+      <div class="sketchbook sheet" id="homeSheet" style="display:none">
+        <div class="ring-strip"><div class="holes"></div></div>
+
+        <!-- 상단: 날짜 + 날씨 -->
+        <div class="row" style="justify-content:space-between; margin-top:28px;">
+          <div class="row" style="flex:1;">
+            <div class="label">날짜 :</div>
+            <div id="dateDisplay" class="value"></div>
+            <input type="hidden" id="diaryDate" />
+          </div>
+          <div class="weather-wrap">
+            <div class="weather-label">날씨 :</div>
+            <button class="weather-btn" data-w="☀️" onclick="selectWeather(this)">☀️</button>
+            <button class="weather-btn" data-w="☁️" onclick="selectWeather(this)">☁️</button>
+            <button class="weather-btn" data-w="❄️" onclick="selectWeather(this)">❄️</button>
+            <button class="weather-btn" data-w="🌧️" onclick="selectWeather(this)">🌧️</button>
+          </div>
+        </div>
+
+        <hr class="dash" />
+
+        <!-- 제목 -->
+        <div class="row" id="titleRow">
+          <div class="label">제목</div>
+          <input type="text" id="diaryTitle" placeholder="오늘 그림일기의 제목" />
+        </div>
+
+        <!-- 그림 썸네일(눌러서 전용 화면) -->
+        <div id="thumbBox" style="margin-top:10px;">
+          <div id="drawThumb" class="thumb-inner" onclick="openDrawScreen()">
+            <div style="text-align:center; color:#888;">
+              <div style="font-size:22px; margin-bottom:6px;">🖍️ 여기를 눌러 그림 그리기</div>
+              <div style="font-size:13px;">그림 전용 화면으로 이동해요</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 내용 -->
+        <div class="lined-box" id="textBox" style="margin-top:12px; flex:1;">
+          <textarea id="diaryText" class="lined-textarea" placeholder="오늘의 이야기를 여기 줄에 맞춰 써 보세요."></textarea>
+        </div>
+
+        <!-- 버튼 -->
+        <div id="homeButtons" class="home-actions">
+  <button class="btn btn-yellow" onclick="uploadDrawing()">완성!</button>
+</div>
+
+
+        <input type="hidden" id="weatherText" />
+      </div>
+    </div>
+  </main>
+
+  <!-- ✅ 그림 전용 화면 -->
+  <main id="screen-drawonly" style="display:none;">
+    <div class="draw-pane">
+      <div class="palette">
+        <div class="color-btn" style="background:black;" onclick="setColor('black')"></div>
+        <div class="color-btn" style="background:red;" onclick="setColor('red')"></div>
+        <div class="color-btn" style="background:blue;" onclick="setColor('blue')"></div>
+        <div class="color-btn" style="background:green;" onclick="setColor('green')"></div>
+        <div class="color-btn" style="background:pink;" onclick="setColor('pink')"></div>
+        <div class="color-btn" style="background:orange;" onclick="setColor('orange')"></div>
+        <button class="btn btn-outline" onclick="toggleEraser()">🧽 지우개</button>
+        <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
+          <span style="font-size:13px;color:#666;">붓 두께</span>
+          <input type="range" id="brushSize" min="2" max="22" value="6" />
+        </div>
+      </div>
+      <div class="canvas-box">
+        <canvas id="drawCanvas"></canvas>
+      </div>
+      <div style="display:flex; gap:8px; justify-content:flex-end;">
+        <button class="btn btn-outline" onclick="closeDrawScreen(false)">취소</button>
+        <button class="btn btn-yellow" onclick="closeDrawScreen(true)">그림 적용</button>
+      </div>
+    </div>
+  </main>
+
+  <!-- ✅ 내 일기장 (스케치북 카드 그리드) -->
+  <main id="screen-journal" style="display:none;">
+    <div class="sketchbook sheet">
+      <div class="ring-strip"><div class="holes"></div></div>
+      <h2 style="margin:28px 0 10px 2px; font-size:18px;">내 일기장</h2>
+      <div class="grid" id="todayGrid"></div>
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap; justify-content:flex-end;">
+        <button class="btn btn-yellow" onclick="switchTab('home')">🖍️ 그림일기 쓰기</button>
+      </div>
+    </div>
+  </main>
+
+  <!-- 일기 보기 (스케치북) -->
+  <main id="screen-view" style="display:none;">
+    <div class="sketchbook sheet">
+      <div class="ring-strip"><div class="holes"></div></div>
+      <div id="viewCard" style="margin-top:28px;"></div>
+      <button class="back-btn" onclick="switchTab('journal')">← 내 일기장으로</button>
+    </div>
+  </main>
+
+  <!-- 내 프로필 (보기/수정 통합) -->
+  <main id="screen-profile" style="display:none;">
+    <div class="sketchbook sheet">
+      <div class="ring-strip"><div class="holes"></div></div>
+      <h2 style="margin:28px 0 10px 2px; font-size:18px;">내 프로필</h2>
+
+      <div id="profileView" style="display:none;">
+        <p><strong>이름:</strong> <span id="viewName"></span></p>
+        <p><strong>학교:</strong> <span id="viewSchool"></span></p>
+        <p><strong>학년/반:</strong> <span id="viewGrade"></span> <span id="viewClass"></span></p>
+        <p><strong>소개:</strong> <span id="viewIntro"></span></p>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;">
+          <button class="btn btn-yellow" onclick="enterProfileEdit()">✏️ 수정하기</button>
+        </div>
+      </div>
+
+      <form id="profileForm" onsubmit="event.preventDefault(); saveProfile();">
+        <label>이름</label>
+        <input id="myName" placeholder="이름 입력" />
+
+        <label>학교</label>
+        <input id="mySchool" placeholder="예: 매아리초등학교" />
+
+        <div style="display:flex; gap:8px;">
+          <div style="flex:1;">
+            <label>학년</label>
+            <select id="myGrade">
+              <option value="">선택</option>
+              <option>1학년</option><option>2학년</option><option>3학년</option>
+              <option>4학년</option><option>5학년</option><option>6학년</option>
+            </select>
+          </div>
+          <div style="flex:1;">
+            <label>반</label>
+            <select id="myClass">
+              <option value="">선택</option>
+              <option>1반</option><option>2반</option><option>3반</option>
+              <option>4반</option><option>5반</option>
+            </select>
+          </div>
+        </div>
+
+        <label>자기소개</label>
+        <textarea id="myIntro" placeholder="나를 소개해요!"></textarea>
+
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px;">
+          <button type="button" class="btn btn-outline" onclick="cancelProfileEdit()">취소</button>
+          <button type="submit" class="btn btn-primary">💾 저장하기</button>
+        </div>
+      </form>
+    </div>
+  </main>
+
+  <nav>
+    <button id="tab-home" class="active" onclick="switchTab('home')">🏠 홈</button>
+    <button id="tab-journal" onclick="switchTab('journal')">📒 내 일기장</button>
+    <button id="tab-profile" onclick="switchTab('profile')">👤 내 프로필</button>
+  </nav>
+
+<script>
+  // ===== 상수/상태 =====
+  const STAMP_SRC = 'stamp.png';
+  let tempImageData = null;
+  let draftSaveTimer = null;
+
+  // 요소
+  const homeSheet = document.getElementById('homeSheet');
+  const dateDisplay = document.getElementById('dateDisplay');
+  const drawThumb = document.getElementById('drawThumb');
+  const todayGrid = document.getElementById('todayGrid');
+  const viewCard = document.getElementById('viewCard');
+
+  const diaryText = document.getElementById('diaryText');
+  const diaryDate = document.getElementById('diaryDate');
+  const weatherText = document.getElementById('weatherText');
+  const diaryTitle = document.getElementById('diaryTitle');
+
+  // 전용 캔버스
+  const canvas = document.getElementById('drawCanvas');
+  const ctx = canvas.getContext('2d');
+  const brushSize = document.getElementById('brushSize');
+
+  let drawing = false, currentColor = 'black', eraserMode = false;
+  let lastX = 0, lastY = 0;
+  let editDiary = null;     // 일기 수정 중(기존 항목)
+  let drawings = [];        // 내 일기 목록 캐시
+
+  // ===== 유틸 =====
+  function todayStr(){ return new Date().toISOString().split('T')[0]; }
+  function formatKoreanDate(iso){
+    if(!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d)) return iso;
+    return `${d.getFullYear()}년 ${d.getMonth()+1}월 ${d.getDate()}일`;
+  }
+  function setWeatherActive(weather, readonly=false){
+    const wrap = document.querySelector('.weather-wrap');
+    document.querySelectorAll('.weather-btn').forEach(b=>{
+      b.classList.toggle('active', b.dataset.w === (weather || ''));
+    });
+    if (wrap) wrap.classList.toggle('readonly', !!readonly);
+  }
+
+  // 저장소
+  function loadAllDiaries(){ try { return JSON.parse(localStorage.getItem('maeariDiaries')) || []; } catch{ return []; } }
+  function saveAllDiaries(arr){ localStorage.setItem('maeariDiaries', JSON.stringify(arr)); }
+  function getMyName(){
+    const saved = localStorage.getItem('maeariProfile'); if(!saved) return '이름미정';
+    try { return JSON.parse(saved).name || '이름미정'; } catch { return '이름미정'; }
+  }
+  function loadMyDrawings(){ drawings = loadAllDiaries().filter(d => d.studentName === getMyName()); }
+  function findDiaryByDate(studentName, date){
+    return loadAllDiaries().find(d => d.studentName===studentName && d.date===date) || null;
+  }
+  function upsertMyDiary(entry){
+    const all = loadAllDiaries();
+    const idx = all.findIndex(d => d.studentName===entry.studentName && d.date===entry.date);
+    if (idx>=0) all[idx] = entry; else all.push(entry);
+    saveAllDiaries(all); loadMyDrawings();
+  }
+
+  // ---- Draft(작성중) 관리 ----
+  function draftKey(studentName, date){ return `maeariDraft:${studentName}:${date}`; }
+  function saveDraft(){
+    clearTimeout(draftSaveTimer);
+    draftSaveTimer = setTimeout(()=>{
+      const key = draftKey(getMyName(), diaryDate.value || todayStr());
+      const draft = {
+        studentName: getMyName(),
+        date: diaryDate.value || todayStr(),
+        title: diaryTitle.value || "",
+        weather: weatherText.value || "",
+        text: diaryText.value || "",
+        imageData: tempImageData || ""
+      };
+      localStorage.setItem(key, JSON.stringify(draft));
+    }, 200);
+  }
+  function loadDraft(studentName, date){
+    const key = draftKey(studentName, date);
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    try { return JSON.parse(raw); } catch { return null; }
+  }
+  function clearDraft(studentName, date){
+    localStorage.removeItem(draftKey(studentName, date));
+  }
+
+  // 초기화
+  window.addEventListener('load', () => {
+    const t = todayStr();
+    diaryDate.value = t;
+    dateDisplay.textContent = formatKoreanDate(t);
+
+    loadProfile();
+    loadMyDrawings();
+    renderHome();       // ✅ 홈은 오늘 일기 상태에 따라 뷰/폼 결정
+    renderGrid();
+    updateThumb();
+
+    diaryTitle.addEventListener('input', saveDraft);
+    diaryText.addEventListener('input', saveDraft);
+
+    // ✅ 초기 렌더 끝난 뒤 한 번에 표시 → 레이아웃 흔들림 방지
+    document.getElementById('homeSheet').style.display = 'block';
+  });
+
+  // 홈 렌더링 (오늘 일기 상태 기반)
+  function renderHome(){
+    const student = getMyName();
+    const t = todayStr();
+    diaryDate.value = t;
+    dateDisplay.textContent = formatKoreanDate(t);
+
+    const final = findDiaryByDate(student, t);
+    if (final){
+      renderTodayReadOnly(final);
+      setWeatherActive(final.weather, true);
+      return;
+    }
+    const draft = loadDraft(student, t);
+    renderTodayForm(draft || null);
+  }
+
+  // 홈: 읽기 전용 카드
+  function renderTodayReadOnly(entry){
+    // 폼 숨김
+    document.getElementById('titleRow').style.display = 'none';
+    document.getElementById('thumbBox').style.display = 'none';
+    document.getElementById('textBox').style.display = 'none';
+    document.getElementById('homeButtons').style.display = 'none';
+
+    // 카드 영역
+    let ro = document.getElementById('todayRO');
+    if (!ro){ ro = document.createElement('div'); ro.id='todayRO'; ro.className='lined-box'; ro.style.marginTop='10px'; homeSheet.appendChild(ro); }
+    const imageBlock = entry.imageData
+      ? `<div class="sketch-artframe"><img src="${entry.imageData}" alt="그림 미리보기"></div>`
+      : `<div class="sketch-artframe" style="color:#888;font-size:13px;">(그림 없음)</div>`;
+
+    ro.innerHTML = `
+      <h2 style="margin:0 0 6px 2px; font-size:18px;">오늘의 일기</h2>
+      <div style="color:gray;font-size:13px;margin-bottom:6px;">${formatKoreanDate(entry.date)} / ${entry.weather || ''}</div>
+      ${entry.stamp ? `<img src="${STAMP_SRC}" alt="참 잘했어요 도장" class="stamp-big">` : ``}
+      ${imageBlock}
+      <div style="font-weight:700; margin:8px 0;">${entry.title || '제목 없음'}</div>
+      <p style="font-size:15px;white-space:pre-wrap;margin:0;">${entry.text || ''}</p>
+      ${
+        (entry.teacherComment && entry.teacherComment.trim()) ?
+        `<div class="teacher-section" style="margin-top:10px;">
+           <div style="font-weight:700;color:#1d5aa6;margin-bottom:6px;">📝 선생님 코멘트</div>
+           <div style="white-space:pre-wrap;">${entry.teacherComment}</div>
+         </div>` : ``
+      }
+      <div style="display:flex;gap:8px;justify-content:flex-end; margin-top:12px;">
+        <button class="btn btn-yellow" onclick="editToday('${entry.date}')">✏️ 수정하기</button>
+      </div>
+    `;
+  }
+
+  // 홈: 작성 폼 표시(초기/임시복원)
+  function renderTodayForm(draft){
+    document.getElementById('titleRow').style.display = '';
+    document.getElementById('thumbBox').style.display = '';
+    document.getElementById('textBox').style.display = '';
+    document.getElementById('homeButtons').style.display = '';
+    const ro = document.getElementById('todayRO'); if (ro) ro.remove();
+
+    diaryTitle.value = draft?.title || '';
+    diaryText.value = draft?.text || '';
+    weatherText.value = draft?.weather || '';
+    setWeatherActive(weatherText.value, false);
+    tempImageData = draft?.imageData || null;
+    updateThumb();
+  }
+
+  function editToday(date){
+    const entry = findDiaryByDate(getMyName(), date);
+    if (!entry) return;
+    const draft = { ...entry };
+    localStorage.setItem(draftKey(getMyName(), date), JSON.stringify(draft));
+    renderTodayForm(draft);
+  }
+
+  // 날씨
+  function selectWeather(btn){
+    document.querySelectorAll('.weather-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    weatherText.value = btn.dataset.w;
+    saveDraft();
+  }
+
+  // 탭
+  function switchTab(tab){
+    document.querySelectorAll('main').forEach(m => m.style.display='none');
+    document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+    document.getElementById(`screen-${tab}`).style.display='block';
+    const tabBtn = document.getElementById(`tab-${tab}`); if (tabBtn) tabBtn.classList.add('active');
+
+    if (tab === 'home') renderHome();
+    if (tab === 'journal') renderGrid();
+    if (tab === 'profile') loadProfile();
+  }
+
+  // 홈 → 전용화면
+  function openDrawScreen(){
+    requestAnimationFrame(setCanvasSize);
+    if (tempImageData){
+      const img = new Image(); img.onload=()=>{ ctx.clearRect(0,0,canvas.width,canvas.height); ctx.drawImage(img,0,0,canvas.width,canvas.height); }; img.src=tempImageData;
+    } else if (editDiary?.imageData){
+      const img = new Image(); img.onload=()=>{ ctx.clearRect(0,0,canvas.width,canvas.height); ctx.drawImage(img,0,0,canvas.width,canvas.height); }; img.src=editDiary.imageData;
+    } else { ctx.clearRect(0,0,canvas.width,canvas.height); }
+    document.getElementById('screen-home').style.display='none';
+    document.getElementById('screen-drawonly').style.display='block';
+  }
+
+  // 전용화면 닫기
+  function closeDrawScreen(apply){
+    if (apply){
+      tempImageData = canvas.toDataURL();
+      updateThumb();
+      saveDraft();
+    }
+    document.getElementById('screen-drawonly').style.display='none';
+    document.getElementById('screen-home').style.display='block';
+  }
+
+  // 썸네일 갱신
+  function updateThumb(){
+    if (tempImageData){
+      drawThumb.innerHTML = `<div class="sketch-artframe"><img src="${tempImageData}" alt="그림 미리보기"></div>`;
+    }else{
+      drawThumb.innerHTML = `
+        <div style="text-align:center; color:#888;">
+          <div style="font-size:22px; margin-bottom:6px;">🖍️ 여기를 눌러 그림 그리기</div>
+          <div style="font-size:13px;">그림 전용 화면으로 이동해요</div>
+        </div>`;
+    }
+  }
+
+  // 저장(최종)
+  function uploadDrawing(){
+    const imageData = tempImageData || '';
+    const text = diaryText.value.trim() || "무제";
+    const date = diaryDate.value || todayStr();
+    const weather = weatherText.value.trim();
+    const title = diaryTitle.value.trim() || "제목 없음";
+    const studentName = getMyName();
+
+    const entry = { studentName, date, title, weather, text, imageData,
+      stamp: editDiary?.stamp || false,
+      teacherComment: editDiary?.teacherComment || "" };
+
+    upsertMyDiary(entry);
+
+    clearDraft(studentName, date);
+    diaryText.value=""; diaryTitle.value="";
+    tempImageData=null; updateThumb();
+    document.querySelectorAll('.weather-btn').forEach(b=>b.classList.remove('active'));
+
+    renderHome();
+    renderGrid();
+    switchTab('home');
+  }
+
+  // 일기장 (폴라로이드 카드)
+  function renderGrid(){
+    todayGrid.innerHTML = "";
+    drawings.sort((a,b)=> (a.date < b.date ? 1 : -1));
+    drawings.forEach(diary => {
+      const div = document.createElement('div');
+      div.className = 'item';
+
+      const photo = diary.imageData
+        ? `<div class="photo"><img src="${diary.imageData}" alt="그림 미리보기"></div>`
+        : `<div class="photo" style="color:#888;font-size:12px;">(그림 없음)</div>`;
+
+      div.innerHTML = `
+        <div class="tape"></div>
+        <div class="polaroid">
+          ${photo}
+          ${diary.stamp ? `<img src="${STAMP_SRC}" alt="참 잘했어요" class="stamp-overlay">` : ''}
+          <div class="pol-title">${diary.title || '제목 없음'}</div>
+          <div class="pol-sub">${formatKoreanDate(diary.date)} / ${diary.weather || ''}</div>
+        </div>`;
+      div.onclick = () => openDiary(diary);
+      todayGrid.appendChild(div);
+    });
+  }
+
+  // 상세(스케치북)
+  function openDiary(diary){
+    switchTab('view');
+    const fresh = loadAllDiaries().find(d => d.studentName===diary.studentName && d.date===diary.date) || diary;
+    const imageBlock = fresh.imageData
+      ? `<div class="sketch-artframe"><img src="${fresh.imageData}" alt="그림 미리보기"></div>`
+      : `<div class="sketch-artframe" style="color:#888;font-size:13px;">(그림 없음)</div>`;
+
+    viewCard.innerHTML = `
+      <h2 style="margin:28px 0 8px 2px;">${fresh.title || '제목 없음'}</h2>
+      <div style="color:gray;font-size:13px;margin-bottom:6px;">${formatKoreanDate(fresh.date)} / ${fresh.weather || ''}</div>
+      ${fresh.stamp ? `<img src="${STAMP_SRC}" alt="참 잘했어요 도장" class="stamp-big">` : ``}
+      ${imageBlock}
+      <p style="font-size:15px;white-space:pre-wrap; margin-top:8px;">${fresh.text}</p>
+      ${
+        (fresh.teacherComment && fresh.teacherComment.trim()) ?
+        `<div class="teacher-section">
+           <div style="font-weight:700;color:#1d5aa6;margin-bottom:6px;">📝 선생님 코멘트</div>
+           <div style="white-space:pre-wrap;">${fresh.teacherComment}</div>
+         </div>` : ``
+      }
+      <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:12px;">
+        <button class="btn btn-danger" onclick="deleteDiary('${fresh.date}')">🗑️ 삭제</button>
+      </div>
+    `;
+  }
+
+  function deleteDiary(date){
+    if (!confirm("정말 이 그림일기를 삭제할까요?")) return;
+    const all = loadAllDiaries().filter(d => !(d.studentName===getMyName() && d.date===date));
+    saveAllDiaries(all); loadMyDrawings(); renderGrid(); alert("그림일기가 삭제되었습니다 🗑️"); switchTab('journal');
+  }
+
+  function editExistingDiary(date){
+    const diary = drawings.find(d => d.date === date); if (!diary) return;
+    editDiary = diary;
+    const draft = { ...diary };
+    localStorage.setItem(draftKey(getMyName(), date), JSON.stringify(draft));
+    switchTab('home');
+  }
+
+  // 🎨 캔버스
+  function setCanvasSize(){
+    const box = canvas.parentElement.getBoundingClientRect();
+    const ratio = getAspect();
+    const width = Math.floor(box.width);
+    const height = Math.floor(width * ratio);
+    canvas.width = width;
+    canvas.height = height;
+    ctx.lineCap = "round"; ctx.lineJoin = "round";
+  }
+  function getAspect(){
+    const styles = getComputedStyle(document.documentElement);
+    const w = parseFloat(styles.getPropertyValue('--art-w')) || 4;
+    const h = parseFloat(styles.getPropertyValue('--art-h')) || 3;
+    return h / w;
+  }
+  function getPos(e){
+    const r = canvas.getBoundingClientRect();
+    if (e.touches && e.touches.length>0) return [e.touches[0].clientX - r.left, e.touches[0].clientY - r.top];
+    return [e.clientX - r.left, e.clientY - r.top];
+  }
+  function startDraw(e){ drawing = true; const [x,y]=getPos(e); [lastX,lastY]=[x,y]; }
+  function draw(e){
+    if(!drawing) return;
+    e.preventDefault();
+    const [x,y]=getPos(e);
+    ctx.strokeStyle = eraserMode ? "#fff" : currentColor;
+    ctx.lineWidth = brushSize.value;
+    ctx.beginPath(); ctx.moveTo(lastX,lastY); ctx.lineTo(x,y); ctx.stroke();
+    [lastX,lastY]=[x,y];
+  }
+  function stopDraw(){ drawing=false; }
+
+  canvas.addEventListener('mousedown', startDraw);
+  canvas.addEventListener('mousemove', draw);
+  canvas.addEventListener('mouseup', stopDraw);
+  canvas.addEventListener('mouseout', stopDraw);
+  canvas.addEventListener('touchstart', startDraw);
+  canvas.addEventListener('touchmove', draw, {passive:false});
+  canvas.addEventListener('touchend', stopDraw);
+
+  function setColor(c){
+    currentColor = c; eraserMode = false;
+    document.querySelectorAll('.color-btn').forEach(b=>{ b.style.outline=''; b.style.boxShadow=''; });
+    const selected = Array.from(document.querySelectorAll('.color-btn')).find(btn => btn.style.background === c);
+    if (selected){ selected.style.outline='3px solid #FFE08C'; selected.style.boxShadow='0 0 6px #FFE08C'; }
+    const eraserBtn = document.querySelector('.btn.btn-outline');
+    if (eraserBtn){ eraserBtn.style.background=''; eraserBtn.style.color=''; eraserBtn.style.border='2px solid var(--pencil)'; }
+  }
+  function toggleEraser(){
+    eraserMode = !eraserMode;
+    const eraserBtn = document.querySelector('.btn.btn-outline');
+    if (eraserMode){ eraserBtn.style.background='#FFE08C'; eraserBtn.style.color='#333'; eraserBtn.style.border='2px solid #E1B000'; }
+    else { eraserBtn.style.background=''; eraserBtn.style.color=''; eraserBtn.style.border='2px solid var(--pencil)'; }
+    document.querySelectorAll('.color-btn').forEach(b=>{ b.style.outline=''; b.style.boxShadow=''; });
+  }
+
+  // ---- 프로필 (보기/수정 토글) ----
+  function loadProfile() {
+    const saved = localStorage.getItem('maeariProfile');
+    if (!saved) {
+      document.getElementById('profileView').style.display = 'none';
+      document.getElementById('profileForm').style.display = 'block';
+      myName.value = ''; mySchool.value = '';
+      myGrade.value = ''; myClass.value = ''; myIntro.value = '';
+      return;
+    }
+    const p = JSON.parse(saved);
+    showProfileView(p);
+    myName.value = p.name || '';
+    mySchool.value = p.school || '';
+    myGrade.value = p.grade || '';
+    myClass.value = p.classNum || '';
+    myIntro.value = p.intro || '';
+  }
+
+  function showProfileView(p) {
+    document.getElementById('profileForm').style.display = 'none';
+    document.getElementById('profileView').style.display = 'block';
+    document.getElementById('viewName').innerText = p.name || '';
+    document.getElementById('viewSchool').innerText = p.school || '';
+    document.getElementById('viewGrade').innerText = p.grade || '';
+    document.getElementById('viewClass').innerText = p.classNum || '';
+    document.getElementById('viewIntro').innerText = p.intro || '';
+  }
+
+  function enterProfileEdit() {
+    document.getElementById('profileView').style.display = 'none';
+    document.getElementById('profileForm').style.display = 'block';
+  }
+
+  function cancelProfileEdit() {
+    const saved = localStorage.getItem('maeariProfile');
+    if (saved) {
+      showProfileView(JSON.parse(saved));
+    } else {
+      document.getElementById('profileView').style.display = 'none';
+      document.getElementById('profileForm').style.display = 'block';
+    }
+  }
+
+  function saveProfile() {
+    const profile = {
+      name: myName.value.trim(),
+      school: mySchool.value.trim(),
+      grade: myGrade.value,
+      classNum: myClass.value,
+      intro: myIntro.value.trim()
+    };
+    if (!profile.name) {
+      alert('이름을 입력해주세요.');
+      myName.focus();
+      return;
+    }
+    localStorage.setItem('maeariProfile', JSON.stringify(profile));
+    alert('프로필이 저장되었습니다 ✅');
+    showProfileView(profile);
+    renderHome();
+    renderGrid();
+  }
+</script>
+</body>
+</html>
