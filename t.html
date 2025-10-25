@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <title>교사용 매아리</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+
+  <body class="bg-[#FAFAFA] text-[#333]">
+    <div id="root"></div>
+
+    <script type="text/babel">
+      const { useState, useEffect, useMemo } = React;
+
+      // === 상수 ===
+      const STAMP_SRC = 'stamp.png'; // 도장 이미지 (동일 폴더)
+
+      // === 공유 저장소 helpers ===
+      const loadAllDiaries = () => {
+        try { return JSON.parse(localStorage.getItem("maeariDiaries")) || []; }
+        catch(e){ return []; }
+      };
+      const saveAllDiaries = (arr) => localStorage.setItem("maeariDiaries", JSON.stringify(arr));
+
+      // 위험도 뱃지
+      function RiskBadge({ risk }) {
+        const style =
+          risk === "위험"
+            ? "bg-red-100 text-red-700 border border-red-300"
+            : risk === "주의"
+            ? "bg-amber-100 text-amber-700 border border-amber-300"
+            : "bg-green-100 text-green-700 border border-green-300";
+        const emoji = risk === "위험" ? "⚠️" : risk === "주의" ? "🟡" : "🟢";
+        return (
+          <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold shadow-sm ${style}`}>
+            {emoji} {risk}
+          </span>
+        );
+      }
+
+      function App() {
+        // 예시 학생들 8명 유지
+        const [students, setStudents] = useState(() => {
+          const saved = localStorage.getItem("students");
+          return saved
+            ? JSON.parse(saved)
+            : Array.from({ length: 8 }, (_, i) => ({
+                id: i + 1,
+                name: `학생 ${i + 1}`,
+                risk: ["정상", "주의", "위험"][i % 3],
+                recent: `2025-10-${String(10 + i).padStart(2, "0")}`,
+                img: `https://picsum.photos/seed/student_${i}/200/200`,
+              }));
+        });
+
+        const [selectedId, setSelectedId] = useState(null);
+        const [filterRisk, setFilterRisk] = useState("전체");
+        const [showAdd, setShowAdd] = useState(false);
+        const [newName, setNewName] = useState("");
+        const [newRisk, setNewRisk] = useState("정상");
+
+        useEffect(() => { localStorage.setItem("students", JSON.stringify(students)); }, [students]);
+
+        const selectedStudent = selectedId === null ? null : students.find(s => s.id === selectedId) || null;
+        useEffect(() => { if (selectedId !== null && !students.some(s => s.id === selectedId)) setSelectedId(null); }, [students, selectedId]);
+
+        const filteredStudents = filterRisk === "전체" ? students : students.filter(s => s.risk === filterRisk);
+
+        const addStudent = () => {
+          if (!newName.trim()) { alert("이름을 입력하세요."); return; }
+          const newStudent = {
+            id: Date.now(),
+            name: newName.trim(),
+            risk: newRisk,
+            recent: new Date().toISOString().split("T")[0],
+            img: `https://picsum.photos/seed/${Math.random()}/200/200`,
+          };
+          setStudents([...students, newStudent]);
+          setShowAdd(false); setNewName(""); setNewRisk("정상");
+        };
+        const deleteStudent = (id) => {
+          if (confirm("정말 이 학생을 삭제하시겠습니까?")) {
+            setStudents(students.filter(s => s.id !== id));
+            setSelectedId(null);
+          }
+        };
+
+        return (
+          <div className="min-h-screen">
+            <header className="px-6 py-4 bg-[#A4D4AE]/60 backdrop-blur border-b flex justify-between items-center">
+              <div className="text-2xl font-bold text-[#2b6240]">교사용 매아리</div>
+              <button onClick={() => setShowAdd(true)} className="bg-[#6BB7FF] text-white px-4 py-2 rounded-lg text-sm hover:bg-[#5aa7f0]">
+                ➕ 학생 추가
+              </button>
+            </header>
+
+            <main className="max-w-6xl mx-auto p-6 space-y-6">
+              {selectedStudent === null ? (
+                <>
+                  {/* 위험도 필터 */}
+                  <div className="flex gap-3 mb-6">
+                    {["전체", "위험", "주의", "정상"].map((r) => {
+                      const count = r === "전체" ? students.length : students.filter(s => s.risk === r).length;
+                      const color = r === "위험" ? "#F87171" : r === "주의" ? "#FBBF24" : r === "정상" ? "#34D399" : "#6BB7FF";
+                      const isActive = filterRisk === r;
+                      return (
+                        <button key={r} onClick={() => setFilterRisk(r)}
+                          className={`flex-1 rounded-xl p-3 text-center font-semibold transition ${isActive ? "text-white scale-105 shadow-lg" : "text-white/80"}`}
+                          style={{ backgroundColor: color, opacity: isActive ? 1 : 0.8 }}>
+                          {r} {count}명
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* 학생 목록 */}
+                  {filteredStudents.length > 0 ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-5">
+                      {filteredStudents.map((s) => (
+                        <div key={s.id} onClick={() => setSelectedId(s.id)}
+                          className={`rounded-2xl border-4 p-4 hover:shadow-lg transition text-center cursor-pointer ${
+                            s.risk === "위험" ? "border-red-400 bg-red-50"
+                              : s.risk === "주의" ? "border-amber-400 bg-amber-50"
+                              : "border-green-400 bg-green-50"}`}>
+                          <img src={s.img} alt={s.name}
+                            className="w-20 h-20 rounded-full mx-auto mb-2 object-cover border border-white shadow-sm" />
+                          <div className="font-medium text-base">{s.name}</div>
+                          <div className="mt-2"><RiskBadge risk={s.risk} /></div>
+                          <div className="text-xs text-gray-500 mt-2">최근: {s.recent}</div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center text-gray-400 py-10">해당 범주의 학생이 없습니다.</div>
+                  )}
+                </>
+              ) : (
+                <StudentDetail
+                  student={selectedStudent}
+                  onBack={() => setSelectedId(null)}
+                  onDelete={() => deleteStudent(selectedStudent.id)}
+                />
+              )}
+            </main>
+
+            {/* 학생 추가 모달 */}
+            {showAdd && (
+              <div className="fixed inset-0 bg-black/40 flex justify-center items-center">
+                <div className="bg-white p-6 rounded-2xl shadow-xl w-80 space-y-4">
+                  <h2 className="text-lg font-semibold text-center text-[#2b6240]">👩‍🏫 학생 추가</h2>
+                  <input type="text" className="border rounded-lg px-3 py-2 w-full" placeholder="이름 입력"
+                         value={newName} onChange={(e) => setNewName(e.target.value)} />
+                  <select className="border rounded-lg px-3 py-2 w-full" value={newRisk}
+                          onChange={(e) => setNewRisk(e.target.value)}>
+                    <option value="정상">정상</option>
+                    <option value="주의">주의</option>
+                    <option value="위험">위험</option>
+                  </select>
+                  <div className="flex justify-end gap-2">
+                    <button onClick={() => setShowAdd(false)} className="px-3 py-2 rounded-lg border border-gray-300 text-gray-600">취소</button>
+                    <button onClick={addStudent} className="px-3 py-2 rounded-lg bg-[#6BB7FF] text-white hover:bg-[#5aa7f0]">추가</button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      }
+
+      // 학생 상세: 아이 일기 로드 → 도장/코멘트 남기기
+      function StudentDetail({ student, onBack, onDelete }) {
+        const { useState, useEffect, useMemo } = React;
+        const [selectedIdx, setSelectedIdx] = useState(0);
+        const [diaries, setDiaries] = useState([]);
+        const [commentDraft, setCommentDraft] = useState("");
+        const [stampChecked, setStampChecked] = useState(false);
+
+        // 이 학생의 일기를 공유 저장소에서 로드
+        useEffect(() => {
+          const all = loadAllDiaries();
+          const list = all.filter(d => d.studentName === student.name)
+                          .sort((a,b)=> (a.date < b.date ? 1 : -1));
+          setDiaries(list);
+          if (list.length > 0) {
+            setSelectedIdx(0);
+            setCommentDraft(list[0].teacherComment || "");
+            setStampChecked(!!list[0].stamp);
+          }
+        }, [student]);
+
+        // 선택 변경 시 드래프트 동기화
+        useEffect(() => {
+          if (diaries.length === 0) return;
+          const cur = diaries[selectedIdx];
+          setCommentDraft(cur?.teacherComment || "");
+          setStampChecked(!!cur?.stamp);
+        }, [selectedIdx]);
+
+        const flagged = useMemo(() => {
+          const dangerWords = ["울었어요", "무서", "아파", "싫어", "괴롭"];
+          return diaries.filter(d => dangerWords.some(w => (d.text || "").includes(w)));
+        }, [diaries]);
+
+        const saveFeedback = () => {
+          if (diaries.length === 0) return;
+          const target = diaries[selectedIdx];
+          const all = loadAllDiaries();
+          const idx = all.findIndex(d => d.studentName===target.studentName && d.date===target.date);
+          if (idx >= 0) {
+            all[idx] = { ...all[idx], teacherComment: commentDraft, stamp: stampChecked };
+            saveAllDiaries(all);
+            const newList = [...diaries];
+            newList[selectedIdx] = all[idx];
+            setDiaries(newList);
+            alert("피드백이 저장되었습니다. ✅ (아이 화면에도 반영됩니다)");
+          }
+        };
+
+        return (
+          <div className="space-y-5">
+            <div className="flex items-center gap-3">
+              <button className="p-2 hover:bg-gray-100 rounded-lg" onClick={onBack}>⬅ 뒤로</button>
+              <h2 className="text-2xl font-semibold text-[#2b6240]">{student.name} 그림일기</h2>
+              <button onClick={onDelete} className="ml-auto text-red-500 text-sm hover:underline">🗑 학생 삭제</button>
+            </div>
+
+            {/* 위험 탐지 요약 */}
+            <div className="border rounded-2xl bg-white p-4 space-y-2">
+              <div className="font-semibold text-[#8a3a3a]">⚠️ 위험 감지 일기: {flagged.length}건</div>
+              <div className="flex gap-3 overflow-x-auto pb-2">
+                {flagged.length > 0 ? flagged.map((d) => (
+                  <div key={d.date}
+                       onClick={() => setSelectedIdx(diaries.findIndex(x => x.date===d.date))}
+                       className="flex-shrink-0 w-36 border rounded-xl overflow-hidden cursor-pointer hover:ring-2 hover:ring-[#FCA5A5]">
+                    <img src={d.imageData} className="w-full h-24 object-cover" alt={d.date}/>
+                    <div className="p-1 text-xs text-center text-gray-600">{d.date}</div>
+                  </div>
+                )) : <div className="text-gray-400 text-sm">위험 일기가 없습니다.</div>}
+              </div>
+            </div>
+
+            {/* 일기 목록 + 상세 */}
+            {diaries.length === 0 ? (
+              <div className="text-center text-gray-400 py-10">
+                이 학생의 그림일기가 아직 없습니다. (아이 앱에서 작성하면 여기에 보여요)
+              </div>
+            ) : (
+              <>
+                {/* 썸네일 리스트 */}
+                <div className="flex gap-3 overflow-x-auto">
+                  {diaries.map((d, i) => (
+                    <div key={d.date}
+                         onClick={() => setSelectedIdx(i)}
+                         className={`flex-shrink-0 w-32 border rounded-xl overflow-hidden cursor-pointer
+                          ${i===selectedIdx ? "ring-2 ring-[#6BB7FF]" : "hover:ring-2 hover:ring-[#93C5FD]"}`}>
+                      <img src={d.imageData} className="w-full h-24 object-cover" alt={d.title}/>
+                      <div className="p-1 text-[11px] text-center text-gray-600">
+                        {d.date}<br/>{d.title || "제목 없음"}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* 상세 + 피드백 */}
+                <div className="grid md:grid-cols-2 gap-5">
+                  <div className="border rounded-2xl bg-white overflow-hidden">
+                    <img src={diaries[selectedIdx].imageData} className="w-full object-cover max-h-[360px]" alt="그림"/>
+                    <div className="p-4 space-y-1 text-sm">
+                      <div className="font-semibold">{diaries[selectedIdx].title || "제목 없음"}</div>
+                      <div className="text-gray-500">{diaries[selectedIdx].date} / {diaries[selectedIdx].weather || ""}</div>
+                      <div className="mt-2 whitespace-pre-wrap">{diaries[selectedIdx].text}</div>
+                    </div>
+                  </div>
+
+                  <div className="border rounded-2xl bg-white p-4 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="font-semibold">선생님 피드백</div>
+                      <label className="inline-flex items-center gap-2 text-sm">
+                        <input type="checkbox" className="w-4 h-4"
+                               checked={stampChecked}
+                               onChange={(e)=>setStampChecked(e.target.checked)}/>
+                        <span className="px-2 py-1 rounded-lg bg-yellow-100 border border-yellow-300">
+                          참 잘했어요 도장
+                        </span>
+                        <img src={STAMP_SRC} alt="도장 미리보기" className="w-8 h-8 rounded" />
+                      </label>
+                    </div>
+                    <textarea
+                      className="w-full border rounded-lg p-3 min-h-[140px]"
+                      placeholder="아이에게 남길 코멘트를 적어주세요"
+                      value={commentDraft}
+                      onChange={(e)=>setCommentDraft(e.target.value)}
+                    ></textarea>
+                    <div className="flex justify-end gap-2">
+                      <button className="px-3 py-2 rounded-lg border border-gray-300 text-gray-600" onClick={()=>onBack()}>목록</button>
+                      <button className="px-3 py-2 rounded-lg bg-[#6BB7FF] text-white hover:bg-[#5aa7f0]" onClick={saveFeedback}>
+                        저장
+                      </button>
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      저장하면 아이 앱(child.html)에서도 도장/코멘트가 즉시 반영됩니다.
+                    </p>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        );
+      }
+
+      ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+    </script>
+  </body>
+</html>
